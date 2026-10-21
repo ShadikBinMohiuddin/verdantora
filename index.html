@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ফটোগ্রাফি</title>
+<title>Photography</title>
 <style>
 :root{--bg:#0f0f10;--card:#1a1a1c;--text:#f2f2f2;--muted:#9a9a9f;--accent:#e8b04a}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Noto Sans Bengali',sans-serif}
 a{color:inherit;text-decoration:none}
 main{max-width:1100px;margin:0 auto;padding:16px}
-.nav{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #2a2a2d}
-.nav nav{display:flex;gap:16px;align-items:center}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #2a2a2d;gap:8px;flex-wrap:wrap}
+.nav nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.nav select{width:auto;margin:0;padding:6px;font-size:14px}
 .brand{font-weight:700;font-size:18px;color:var(--accent)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
 .tile{background:var(--card);border-radius:10px;overflow:hidden;display:block}
@@ -22,7 +23,7 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 .card{background:var(--card);border-radius:10px;padding:14px;margin:14px 0}
 .hero{width:100%;border-radius:10px;display:block}
 input,textarea,select{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:1px solid #333;background:#111;color:var(--text);font-size:16px}
-button{background:var(--accent);color:#111;border:0;padding:10px 16px;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer}
+button,a.btn{background:var(--accent);color:#111;border:0;padding:10px 16px;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer;display:inline-block}
 button:disabled{opacity:.5}
 button.link{background:none;color:var(--text);padding:0;font-weight:400}
 button.ghost{background:#2a2a2d;color:var(--text)}
@@ -31,22 +32,29 @@ button.ghost{background:#2a2a2d;color:var(--text)}
 h2,h3{margin:8px 0}
 .box{max-width:720px;margin:0 auto}
 .sep{border-top:1px solid #2a2a2d;margin-top:12px;padding-top:8px}
+code{background:#111;padding:4px 6px;border-radius:6px;font-size:13px}
 </style>
 </head>
 <body>
-<header class="nav"><a class="brand" href="#/" id="brand"></a><nav id="nav"></nav></header>
+<header class="nav">
+  <a class="brand" href="#/" id="brand"></a>
+  <nav id="nav"></nav>
+</header>
 <main id="app"></main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// ====== শুধু এই চারটা বদলান ======
+// ====== Change only these values ======
 const CONFIG = {
   SUPABASE_URL: 'https://xxxx.supabase.co',
-  SUPABASE_ANON_KEY: 'এখানে anon key বসান',
+  SUPABASE_ANON_KEY: 'paste your anon key here',
   BKASH: '01XXXXXXXXX',
-  SITE_NAME: 'আমার ফটোগ্রাফি'
+  CRYPTO_ADDRESS: '0xYourAvalancheWalletAddress',
+  INTL_PAY_LINK: 'https://paypal.me/yourname/{amount}USD',
+  SITE_NAME: 'My Photography'
 };
-// =================================
+// Tip: set INTL_PAY_LINK to '' to hide PayPal, or CRYPTO_ADDRESS to '' to hide crypto.
+// ======================================
 
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 const app = document.getElementById('app');
@@ -56,13 +64,27 @@ document.title = CONFIG.SITE_NAME;
 
 let user = null, isAdmin = false;
 
+let region = (() => {
+  try { const s = localStorage.getItem('region'); if (s === 'BD' || s === 'INTL') return s; } catch (e) {}
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Dhaka' ? 'BD' : 'INTL'; } catch (e) { return 'INTL'; }
+})();
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = (id) => document.getElementById(id);
 const previewUrl = (p) => sb.storage.from('previews').getPublicUrl(p).data.publicUrl;
+const fmt = (p) => region === 'BD' ? '৳' + p.price : '$' + Number(p.price_usd).toFixed(2);
 
 function renderNav() {
-  navEl.innerHTML = (isAdmin ? '<a href="#/admin">অ্যাডমিন</a>' : '') +
-    (user ? '<button class="link" id="out">লগআউট</button>' : '<a href="#/login">লগইন</a>');
+  navEl.innerHTML =
+    `<select id="reg"><option value="BD">🇧🇩 Bangladesh (৳)</option><option value="INTL">🌍 International ($)</option></select>` +
+    (isAdmin ? '<a href="#/admin">Admin</a>' : '') +
+    (user ? '<button class="link" id="out">Log out</button>' : '<a href="#/login">Log in</a>');
+  $('reg').value = region;
+  $('reg').onchange = (e) => {
+    region = e.target.value;
+    try { localStorage.setItem('region', region); } catch (er) {}
+    route();
+  };
   if (user) $('out').onclick = () => sb.auth.signOut();
 }
 
@@ -81,7 +103,6 @@ sb.auth.onAuthStateChange((ev, session) => {
   if (id === (user?.id || null) && ev !== 'INITIAL_SESSION') return;
   setTimeout(async () => { await setUser(session); route(); }, 0);
 });
-
 window.addEventListener('hashchange', route);
 
 function route() {
@@ -92,25 +113,25 @@ function route() {
   return homePage();
 }
 
-// ---------- হোম ----------
+// ---------- Home ----------
 async function homePage() {
-  app.innerHTML = '<p class="muted">লোড হচ্ছে...</p>';
-  const { data } = await sb.from('photos').select('id,title,price,preview_path').order('created_at', { ascending: false });
-  if (!data || !data.length) { app.innerHTML = '<p class="muted">এখনো কোনো ছবি আপলোড হয়নি।</p>'; return; }
+  app.innerHTML = '<p class="muted">Loading...</p>';
+  const { data } = await sb.from('photos').select('id,title,price,price_usd,preview_path').order('created_at', { ascending: false });
+  if (!data || !data.length) { app.innerHTML = '<p class="muted">No photos yet.</p>'; return; }
   app.innerHTML = '<div class="grid">' + data.map((p) =>
     `<a class="tile" href="#/photo/${esc(p.id)}"><img loading="lazy" src="${esc(previewUrl(p.preview_path))}" alt="${esc(p.title)}">
-     <div class="meta"><span>${esc(p.title)}</span><span class="price">৳${esc(p.price)}</span></div></a>`).join('') + '</div>';
+     <div class="meta"><span>${esc(p.title)}</span><span class="price">${esc(fmt(p))}</span></div></a>`).join('') + '</div>';
 }
 
-// ---------- লগইন ----------
+// ---------- Login ----------
 function loginPage(mode = 'login') {
   app.innerHTML = `<form id="f" class="card" style="max-width:420px;margin:24px auto">
-    <h2>${mode === 'login' ? 'লগইন' : 'নতুন অ্যাকাউন্ট'}</h2>
-    <input id="em" type="email" placeholder="ইমেইল" required>
-    <input id="pw" type="password" placeholder="পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)" minlength="6" required>
-    <button id="go">${mode === 'login' ? 'লগইন করুন' : 'অ্যাকাউন্ট খুলুন'}</button>
+    <h2>${mode === 'login' ? 'Log in' : 'Create account'}</h2>
+    <input id="em" type="email" placeholder="Email" required>
+    <input id="pw" type="password" placeholder="Password (min 6 characters)" minlength="6" required>
+    <button id="go">${mode === 'login' ? 'Log in' : 'Sign up'}</button>
     <p id="msg" class="error"></p>
-    <p class="muted"><button type="button" class="link" id="sw">${mode === 'login' ? 'অ্যাকাউন্ট নেই? নতুন খুলুন' : 'আগে থেকেই অ্যাকাউন্ট আছে? লগইন'}</button></p>
+    <p class="muted"><button type="button" class="link" id="sw">${mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}</button></p>
   </form>`;
   $('sw').onclick = () => loginPage(mode === 'login' ? 'signup' : 'login');
   $('f').onsubmit = async (e) => {
@@ -120,16 +141,16 @@ function loginPage(mode = 'login') {
     const { data, error } = mode === 'login' ? await sb.auth.signInWithPassword(creds) : await sb.auth.signUp(creds);
     $('go').disabled = false;
     if (error) { $('msg').textContent = error.message; return; }
-    if (mode === 'signup' && !data.session) { $('msg').textContent = 'ইমেইলে কনফার্মেশন লিংক গেছে। লিংকে ক্লিক করে তারপর লগইন করুন।'; return; }
+    if (mode === 'signup' && !data.session) { $('msg').textContent = 'We sent a confirmation link to your email. Click it, then log in.'; return; }
     location.hash = '#/';
   };
 }
 
-// ---------- ছবির পেজ ----------
+// ---------- Photo page ----------
 async function photoPage(id) {
-  app.innerHTML = '<p class="muted">লোড হচ্ছে...</p>';
+  app.innerHTML = '<p class="muted">Loading...</p>';
   const { data: photo } = await sb.from('photos').select('*').eq('id', id).maybeSingle();
-  if (!photo) { app.innerHTML = '<p class="error">ছবি পাওয়া যায়নি।</p>'; return; }
+  if (!photo) { app.innerHTML = '<p class="error">Photo not found.</p>'; return; }
   const { data: reviews } = await sb.from('reviews').select('*').eq('photo_id', id).order('created_at', { ascending: false });
   let order = null;
   if (user) {
@@ -140,26 +161,37 @@ async function photoPage(id) {
   const rv = reviews || [];
   const avg = rv.length ? (rv.reduce((a, r) => a + r.rating, 0) / rv.length).toFixed(1) : null;
   const canDownload = isAdmin || order?.status === 'approved';
+  const rejected = order?.status === 'rejected'
+    ? '<p class="error">Your previous payment could not be verified. Please try again with the correct transaction ID.</p>' : '';
 
   let buy;
-  if (!user) buy = '<p>কিনতে হলে <a href="#/login" style="text-decoration:underline">লগইন করুন</a>।</p>';
-  else if (canDownload) buy = '<button id="dl">হাই-রেজোলিউশন ডাউনলোড</button>';
-  else if (order?.status === 'pending') buy = '<p class="muted">আপনার পেমেন্ট যাচাই চলছে। অ্যাপ্রুভ হলে এখানে ডাউনলোড বাটন আসবে।</p>';
-  else buy = `<form id="of"><p>১. bKash/Nagad (Send Money) করুন <b>${esc(CONFIG.BKASH)}</b> নম্বরে, পরিমাণ <b>৳${esc(photo.price)}</b>।<br>২. নিচে TrxID লিখে সাবমিট করুন।</p>
-      <input id="trx" placeholder="TrxID" required><button>সাবমিট করুন</button>
-      ${order?.status === 'rejected' ? '<p class="error">আগের পেমেন্ট যাচাই হয়নি। সঠিক TrxID দিয়ে আবার চেষ্টা করুন।</p>' : ''}</form>`;
+  if (!user) buy = '<p>Please <a href="#/login" style="text-decoration:underline">log in</a> to buy this photo.</p>';
+  else if (canDownload) buy = '<button id="dl">Download high-resolution</button><p class="muted">The download link works for 60 seconds. Click again for a new one.</p>';
+  else if (order?.status === 'pending') buy = '<p class="muted">Your payment is being verified. The download button will appear here once approved.</p>';
+  else if (region === 'BD') {
+    buy = `<form id="of"><p>1. Send <b>৳${esc(photo.price)}</b> via bKash/Nagad (Send Money) to <b>${esc(CONFIG.BKASH)}</b>.<br>2. Enter the TrxID below and submit.</p>
+      <input id="trx" placeholder="TrxID" required><button>Submit</button>${rejected}</form>`;
+  } else {
+    const usd = Number(photo.price_usd).toFixed(2);
+    const url = CONFIG.INTL_PAY_LINK ? CONFIG.INTL_PAY_LINK.replace('{amount}', usd) : '';
+    buy = `<form id="of"><p>Pay <b>$${usd}</b> using one of these:</p>
+      ${url ? `<p><b>Option A: Card / PayPal</b><br><a class="btn" target="_blank" rel="noopener" href="${esc(url)}">Pay $${usd}</a></p>` : ''}
+      ${CONFIG.CRYPTO_ADDRESS ? `<p><b>Option B: USDC on Avalanche C-Chain</b><br>Send exactly ${usd} USDC to:<br><code style="word-break:break-all">${esc(CONFIG.CRYPTO_ADDRESS)}</code></p>` : ''}
+      <p>Then enter your transaction ID / hash below.</p>
+      <input id="trx" placeholder="Transaction ID / hash" required><button>Submit</button>${rejected}</form>`;
+  }
 
   const reviewForm = user ? `<form id="rf">
       <select id="rt">${[5,4,3,2,1].map((n) => `<option value="${n}">${'★'.repeat(n)}</option>`).join('')}</select>
-      <textarea id="cm" rows="3" placeholder="আপনার মতামত লিখুন" required></textarea><button>রিভিউ দিন</button></form>`
-    : '<p class="muted">রিভিউ দিতে লগইন করুন।</p>';
+      <textarea id="cm" rows="3" placeholder="Write your review" required></textarea><button>Post review</button></form>`
+    : '<p class="muted">Log in to leave a review.</p>';
 
   app.innerHTML = `<div class="box">
     <img class="hero" src="${esc(previewUrl(photo.preview_path))}" alt="${esc(photo.title)}">
     <h2>${esc(photo.title)}</h2>
-    <p><span class="price">৳${esc(photo.price)}</span>${avg ? `<span class="muted"> · ★ ${avg} (${rv.length}টি রিভিউ)</span>` : ''}</p>
-    <div class="card"><h3>ডাউনলোড</h3>${buy}<p id="err" class="error"></p></div>
-    <div class="card"><h3>রিভিউ</h3>${reviewForm}
+    <p><span class="price">${esc(fmt(photo))}</span>${avg ? `<span class="muted"> · ★ ${avg} (${rv.length} reviews)</span>` : ''}</p>
+    <div class="card"><h3>Download</h3>${buy}<p id="err" class="error"></p></div>
+    <div class="card"><h3>Reviews</h3>${reviewForm}
       ${rv.map((r) => `<div class="sep"><span class="price">${'★'.repeat(r.rating)}</span> <span class="muted">${esc((r.user_email || '').split('@')[0])}</span><div>${esc(r.comment)}</div></div>`).join('')}
     </div></div>`;
 
@@ -168,12 +200,15 @@ async function photoPage(id) {
     const ext = photo.original_path.split('.').pop();
     const { data, error } = await sb.storage.from('originals').createSignedUrl(photo.original_path, 60, { download: `${photo.title}.${ext}` });
     $('dl').disabled = false;
-    if (error) { $('err').textContent = 'ডাউনলোড করা যায়নি: ' + error.message; return; }
+    if (error) { $('err').textContent = 'Download failed: ' + error.message; return; }
     location.href = data.signedUrl;
   };
   if ($('of')) $('of').onsubmit = async (e) => {
     e.preventDefault();
-    const { error } = await sb.from('orders').insert({ photo_id: id, user_id: user.id, user_email: user.email, trx_id: $('trx').value.trim() });
+    const { error } = await sb.from('orders').insert({
+      photo_id: id, user_id: user.id, user_email: user.email,
+      trx_id: $('trx').value.trim(), method: region === 'BD' ? 'bkash' : 'intl'
+    });
     if (error) { $('err').textContent = error.message; return; }
     photoPage(id);
   };
@@ -185,7 +220,7 @@ async function photoPage(id) {
   };
 }
 
-// ---------- অ্যাডমিন ----------
+// ---------- Admin ----------
 async function makePreview(file, watermark) {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
@@ -202,31 +237,32 @@ async function makePreview(file, watermark) {
 }
 
 async function adminPage() {
-  if (!user || !isAdmin) { app.innerHTML = '<p class="error">এই পেজ শুধু অ্যাডমিনের জন্য।</p>'; return; }
-  const { data: orders } = await sb.from('orders').select('*, photos(title,price)').order('created_at', { ascending: false });
-  const { data: photos } = await sb.from('photos').select('id,title,price').order('created_at', { ascending: false });
+  if (!user || !isAdmin) { app.innerHTML = '<p class="error">This page is for the admin only.</p>'; return; }
+  const { data: orders } = await sb.from('orders').select('*, photos(title,price,price_usd)').order('created_at', { ascending: false });
+  const { data: photos } = await sb.from('photos').select('id,title,price,price_usd').order('created_at', { ascending: false });
   const pending = (orders || []).filter((o) => o.status === 'pending');
 
   app.innerHTML = `<div class="box">
-    <form id="uf" class="card"><h3>নতুন ছবি আপলোড</h3>
+    <form id="uf" class="card"><h3>Upload a new photo</h3>
       <input id="file" type="file" accept="image/*" required>
-      <input id="title" placeholder="টাইটেল" required>
-      <input id="price" type="number" min="0" placeholder="দাম (টাকা)" required>
-      <button id="ub">আপলোড করুন</button><p id="um"></p></form>
-    <div class="card"><h3>অপেক্ষমাণ পেমেন্ট (${pending.length})</h3>
-      ${pending.length ? '' : '<p class="muted">কিছু নেই।</p>'}
-      ${pending.map((o) => `<div class="sep"><b>${esc(o.photos?.title)}</b> — ৳${esc(o.photos?.price)}
-        <div class="muted">${esc(o.user_email)} · TrxID: <b>${esc(o.trx_id)}</b></div>
-        <div class="row" style="margin-top:6px"><button data-ok="${esc(o.id)}">অ্যাপ্রুভ</button><button class="ghost" data-no="${esc(o.id)}">রিজেক্ট</button></div></div>`).join('')}
+      <input id="title" placeholder="Title" required>
+      <input id="price" type="number" min="0" placeholder="Price in BDT (৳)" required>
+      <input id="usd" type="number" min="0" step="0.01" placeholder="Price in USD ($)" required>
+      <button id="ub">Upload</button><p id="um"></p></form>
+    <div class="card"><h3>Pending payments (${pending.length})</h3>
+      ${pending.length ? '' : '<p class="muted">Nothing pending.</p>'}
+      ${pending.map((o) => `<div class="sep"><b>${esc(o.photos?.title)}</b> — ${o.method === 'intl' ? '$' + Number(o.photos?.price_usd).toFixed(2) + ' (card / PayPal / crypto)' : '৳' + esc(o.photos?.price) + ' (bKash/Nagad)'}
+        <div class="muted">${esc(o.user_email)} · Transaction ID: <b style="word-break:break-all">${esc(o.trx_id)}</b></div>
+        <div class="row" style="margin-top:6px"><button data-ok="${esc(o.id)}">Approve</button><button class="ghost" data-no="${esc(o.id)}">Reject</button></div></div>`).join('')}
     </div>
-    <div class="card"><h3>আপলোড করা ছবি (${(photos || []).length})</h3>
-      ${(photos || []).map((p) => `<div class="row sep" style="justify-content:space-between"><span>${esc(p.title)} · ৳${esc(p.price)}</span><button class="ghost" data-del="${esc(p.id)}">মুছুন</button></div>`).join('')}
+    <div class="card"><h3>Uploaded photos (${(photos || []).length})</h3>
+      ${(photos || []).map((p) => `<div class="row sep" style="justify-content:space-between"><span>${esc(p.title)} · ৳${esc(p.price)} / $${Number(p.price_usd).toFixed(2)}</span><button class="ghost" data-del="${esc(p.id)}">Delete</button></div>`).join('')}
     </div></div>`;
 
   $('uf').onsubmit = async (e) => {
     e.preventDefault();
     const file = $('file').files[0];
-    $('ub').disabled = true; $('um').className = ''; $('um').textContent = 'আপলোড হচ্ছে...';
+    $('ub').disabled = true; $('um').className = ''; $('um').textContent = 'Uploading...';
     try {
       const key = crypto.randomUUID();
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
@@ -236,18 +272,21 @@ async function adminPage() {
       if (r.error) throw r.error;
       r = await sb.storage.from('originals').upload(originalPath, file, { contentType: file.type });
       if (r.error) throw r.error;
-      r = await sb.from('photos').insert({ title: $('title').value, price: Number($('price').value), preview_path: previewPath, original_path: originalPath });
+      r = await sb.from('photos').insert({
+        title: $('title').value, price: Number($('price').value), price_usd: Number($('usd').value),
+        preview_path: previewPath, original_path: originalPath
+      });
       if (r.error) throw r.error;
       adminPage();
     } catch (err) {
-      $('um').className = 'error'; $('um').textContent = 'ত্রুটি: ' + (err.message || err);
+      $('um').className = 'error'; $('um').textContent = 'Error: ' + (err.message || err);
       $('ub').disabled = false;
     }
   };
   app.querySelectorAll('[data-ok]').forEach((b) => b.onclick = async () => { await sb.from('orders').update({ status: 'approved' }).eq('id', b.dataset.ok); adminPage(); });
   app.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => { await sb.from('orders').update({ status: 'rejected' }).eq('id', b.dataset.no); adminPage(); });
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-    if (!confirm('ছবিটি মুছে ফেলবেন?')) return;
+    if (!confirm('Delete this photo?')) return;
     const { data: p } = await sb.from('photos').select('*').eq('id', b.dataset.del).single();
     await sb.storage.from('previews').remove([p.preview_path]);
     await sb.storage.from('originals').remove([p.original_path]);
